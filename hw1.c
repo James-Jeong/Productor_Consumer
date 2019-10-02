@@ -1,15 +1,15 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <semaphore.h>
 #include <pthread.h>
 #include <malloc.h>
-#include <semaphore.h>
-#include <stdlib.h>
 
 #define PTHREAD_NUM 2
 #define DATA_NUM 100
 
-sem_t mutex, list_has_space, list_has_data;
+sem_t mutex, mutex2, list_has_space, list_has_data;
 
-int count = 0;
+int count = -1; 
 
 struct Node
 {
@@ -37,6 +37,7 @@ struct Node* insertN(struct Node* target, struct Node* temp)
 {
 	struct Node* New;
 	New = (struct Node*)malloc(sizeof(struct Node));
+	sem_wait(&mutex2); // critical section 방지 mutex2
 	*New = *temp;
 
 	if(head->next == tail)
@@ -53,11 +54,15 @@ struct Node* insertN(struct Node* target, struct Node* temp)
 		New->next = tail;
 		tail->prev = New;
 	}
+
+	sem_post(&mutex2);
 	return New;
 }
 
 int deleteN(struct Node *target)
 {
+	sem_wait(&mutex2); // critical section 방지 mutex2
+
 	if(target->next == NULL)
 		return -1;
 
@@ -69,6 +74,8 @@ int deleteN(struct Node *target)
 	del->next->prev = del->prev;
 
 	free(del);
+
+	sem_post(&mutex2); // critical section 방지 mutex2
 	return 1;
 }
 
@@ -80,24 +87,20 @@ void* P(void* args) // 데이터를 최대 100개까지 Linked list에 축적하
 	struct Node temp;
 	target = head;
 
-	for(i=1; i<=1000; i++)
+	for(i=0; i<1000; i++)
 	{
-
-		if(count > DATA_NUM)
+		if(count == DATA_NUM)
 		{
-			target = tail;
 			//printf("List is fulled %d\n", i);
-			sem_wait(&list_has_space);
+			target = tail;
+			sem_wait(&list_has_space); // 데이터가 100개로 가득차서 기다림
 		}
-		if(count <= DATA_NUM){
-			sem_wait(&mutex);
-			count++;
-			temp.data = i;
-			target = insertN(target, &temp); // Linked list에 데이터 추가
-			//printf("P produce %d\n", i);
-			sem_post(&list_has_data);
-			sem_post(&mutex);
-		}
+		sem_wait(&mutex); // critical section 방지 mutex
+		temp.data = i;
+		target = insertN(target, &temp); // Linked list에 데이터 추가
+		count++;
+		sem_post(&list_has_data); // 데이터가 생겼다고 consumer에 신호 보냄
+		sem_post(&mutex); // critical section 방지 mutex
 	}
 	pthread_exit((void*)0); // producer를 돌리는 Thread 종료
 }
@@ -108,35 +111,34 @@ void* C(void* args) // Linked list에서 0개가 될 때까지 데이터를 제�
 	struct Node* Now;
 	Now = head;
 
-	for(i=1; i<=1000; i++)
+	for(i=0; i<1000; i++)
 	{
-		if(count <= 0)
+		if(count == 0)
 		{
-			Now = head;
 			//printf("List is empty %d\n", i);
-			sem_wait(&list_has_data);
+			Now = head;
+			sem_wait(&list_has_data); // 꺼낼 데이터가 없으니까 기다림
 		}
-		if(count > 0){
-			sem_wait(&mutex);
-			count--;
-			Now = Now->next;
-			data = Now->data;
-			deleteN(Now); // Linked list에서 데이터 삭제
-			//printf("C consume %d\n", data);
-			printf("%d\n", data);
-			sem_post(&list_has_space);
-			sem_post(&mutex);
-		}
+		sem_wait(&mutex);
+		Now = Now->next;
+		data = Now->data;
+		deleteN(Now); // Linked list에서 데이터 삭제
+		count--;
+		sem_post(&mutex);
+		sem_post(&list_has_space); // 데이터 공간이 생겼다고 producer에 신호 보냄
+		printf("%d\n", data);
 	}
 	pthread_exit((void*)0); // consumer를 돌리는 Thread 종료
 }
 
 
-int main(){
+int  main()
+{
 	InitL();
 
 	// Initialize Semaphore
 	if(sem_init(&mutex, 0, 1) < 0){ perror("Fail to make mutex"); exit(-1); }
+	if(sem_init(&mutex2, 0, 1) < 0){ perror("Fail to make mutex2"); exit(-1); }
 	if(sem_init(&list_has_space, 0, 0) < 0){ perror("Fail to make list_has_space"); exit(-1); }
 	if(sem_init(&list_has_data, 0, 0) < 0){ perror("Fail to make list_has_data"); exit(-1); }
 
@@ -148,3 +150,4 @@ int main(){
 		perror("Fail to create Consumer thread!"); exit(-1); }
 	for(int i = 0; i < PTHREAD_NUM; i++){ pthread_join(td[i], NULL); }
 }
+
