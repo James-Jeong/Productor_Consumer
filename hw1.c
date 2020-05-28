@@ -56,7 +56,7 @@ list_t* list_init()
 	return list;
 }
 
-void data_destroy(data_t *data)
+void list_destroy(data_t *data)
 {
 	if(data->head)
 	{
