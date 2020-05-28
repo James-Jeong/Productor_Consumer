@@ -21,7 +21,7 @@ struct list_s
 {
 	node_t *head;
 	node_t *tail;
-	int count = -1;
+	int count;
 	sem_t mutex;
 	sem_t mutex2;
 	sem_t list_has_space;
@@ -50,6 +50,8 @@ list_t* list_init()
 	if(sem_init(&(list->mutex2), 0, 1) < 0){ perror("Fail to make mutex2"); list_destroy(list); return NULL; }
 	if(sem_init(&(list->list_has_space), 0, 0) < 0){ perror("Fail to make list_has_space"); list_destroy(list); return NULL; }
 	if(sem_init(&(list->list_has_data), 0, 0) < 0){ perror("Fail to make list_has_data"); list_destroy(list); return NULL; }
+	
+	list->count = 0;
 	
 	return list;
 }
