@@ -66,6 +66,10 @@ void list_destroy(list_t *list)
 	{
 		node_destroy(list->tail);
 	}
+	sem_destroy(&(list->mutex));
+	sem_destroy(&(list->mutex2));
+	sem_destroy(&(list->list_has_space));
+	sem_destroy(&(list->list_has_data));
 	free(list);
 }
 
