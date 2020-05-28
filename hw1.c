@@ -16,6 +16,20 @@ struct node_s
 	int data;
 };
 
+node_t* node_init(int data)
+{
+	node_t *new_node = (node_t*)malloc(sizeof(node_t));
+	if(new_node == NULL){ printf("node init fail\n"); return NULL; }
+	new_node->data = data;
+	return new_node;
+}
+
+void node_destroy(node_t *node)
+{
+	free(node);
+}
+
+
 typedef struct list_s list_t;
 struct list_s
 {
@@ -28,33 +42,6 @@ struct list_s
 	sem_t list_has_data;
 };
 
-
-list_t* list_init()
-{
-	list_t *list = (list_t*)malloc(sizeof(list_t));
-	if(list == NULL){ printf("list init fail\n"); return NULL; }
-	
-	list->head = node_init(0);
-	if(list->head == NULL){ printf("head node init fail\n"); list_destroy(list); return NULL; }
-	list->tail = node_init(0);
-	if(list->tail== NULL){ printf("taiol node init fail\n"); list_destroy(list); return NULL; }
-
-	list->head->next = tail;
-	list->head->prev = NULL;
-
-	list->tail->next = NULL;
-	list->tail->prev = head;
-	
-	// Initialize Semaphore
-	if(sem_init(&(list->mutex), 0, 1) < 0){ perror("Fail to make mutex"); list_destroy(list); return NULL; }
-	if(sem_init(&(list->mutex2), 0, 1) < 0){ perror("Fail to make mutex2"); list_destroy(list); return NULL; }
-	if(sem_init(&(list->list_has_space), 0, 0) < 0){ perror("Fail to make list_has_space"); list_destroy(list); return NULL; }
-	if(sem_init(&(list->list_has_data), 0, 0) < 0){ perror("Fail to make list_has_data"); list_destroy(list); return NULL; }
-	
-	list->count = -1;
-	
-	return list;
-}
 
 void list_destroy(list_t *list)
 {
@@ -73,17 +60,31 @@ void list_destroy(list_t *list)
 	free(list);
 }
 
-node_t* node_init(int data)
+list_t* list_init()
 {
-	node_t *new_node = (node_t*)malloc(sizeof(node_t));
-	if(new_node == NULL){ printf("node init fail\n"); return NULL; }
-	new_node->data = data;
-	return new_node;
-}
+	list_t *list = (list_t*)malloc(sizeof(list_t));
+	if(list == NULL){ printf("list init fail\n"); return NULL; }
+	
+	list->head = node_init(0);
+	if(list->head == NULL){ printf("head node init fail\n"); list_destroy(list); return NULL; }
+	list->tail = node_init(0);
+	if(list->tail== NULL){ printf("taiol node init fail\n"); list_destroy(list); return NULL; }
 
-void node_destroy(node_t *node)
-{
-	free(node);
+	list->head->next = list->tail;
+	list->head->prev = NULL;
+
+	list->tail->next = NULL;
+	list->tail->prev = list->head;
+	
+	// Initialize Semaphore
+	if(sem_init(&(list->mutex), 0, 1) < 0){ perror("Fail to make mutex"); list_destroy(list); return NULL; }
+	if(sem_init(&(list->mutex2), 0, 1) < 0){ perror("Fail to make mutex2"); list_destroy(list); return NULL; }
+	if(sem_init(&(list->list_has_space), 0, 0) < 0){ perror("Fail to make list_has_space"); list_destroy(list); return NULL; }
+	if(sem_init(&(list->list_has_data), 0, 0) < 0){ perror("Fail to make list_has_data"); list_destroy(list); return NULL; }
+	
+	list->count = 0;
+	
+	return list;
 }
 
 int list_insert(list_t *list, int data)
@@ -136,19 +137,23 @@ void* P(void* args) // 데이터를 최대 100개까지 Linked list에 축적하
 	int i, is_ins_fail;
 	list_t *list = (list_t*)(args);
 
-	for(i=0; i<1000; i++)
+	for(i=1; i<=1000; i++)
 	{
 		if(list->count == DATA_NUM)
 		{
 			//printf("List is fulled %d\n", i);
 			sem_wait(&(list->list_has_space)); // 데이터가 100개로 가득차서 기다림
 		}
-		sem_wait(&(list->mutex)); // critical section 방지 mutex
-		is_ins_fail = list_insert(list, i); // Linked list에 데이터 추가
-		if(is_ins_fail == -1){ printf("insert fail\n"); break; }
-		(list->count)++;
-		sem_post(&(list->list_has_data)); // 데이터가 생겼다고 consumer에 신호 보냄
-		sem_post(&(list->mutex)); // critical section 방지 mutex
+		if(list->count < DATA_NUM){
+			sem_wait(&(list->mutex)); // critical section 방지 mutex
+			is_ins_fail = list_insert(list, i); // Linked list에 데이터 추가
+			if(is_ins_fail == -1){ printf("insert fail\n"); break; }
+			(list->count)++;
+			printf("P %d\n", i);
+			printf("list count : %d\n", list->count);
+			sem_post(&(list->mutex)); // critical section 방지 mutex
+			sem_post(&(list->list_has_data)); // 데이터가 생겼다고 consumer에 신호 보냄
+		}
 	}
 	pthread_exit((void*)0); // producer를 돌리는 Thread 종료
 }
@@ -159,7 +164,7 @@ void* C(void* args) // Linked list에서 0개가 될 때까지 데이터를 제�
 	list_t *list = (list_t*)(args);
 	node_t* Now = list->head;
 
-	for(i=0; i<1000; i++)
+	for(i=1; i<=1000; i++)
 	{
 		if(list->count == 0)
 		{
@@ -167,15 +172,18 @@ void* C(void* args) // Linked list에서 0개가 될 때까지 데이터를 제�
 			Now = list->head;
 			sem_wait(&(list->list_has_data)); // 꺼낼 데이터가 없으니까 기다림
 		}
-		sem_wait(&(list->mutex));
-		Now = Now->next;
-		data = Now->data;
-		is_del_fail = list_delete(list, Now); // Linked list에서 데이터 삭제
-		if(is_del_fail == -1){ printf("delete fail\n"); break; }
-		(list->count)--;
-		sem_post(&(list->mutex));
-		sem_post(&(list->list_has_space)); // 데이터 공간이 생겼다고 producer에 신호 보냄
-		printf("%d\n", data);
+		if(list->count >= 1){
+			sem_wait(&(list->mutex));
+			Now = Now->next;
+			data = Now->data;
+			is_del_fail = list_delete(list, Now); // Linked list에서 데이터 삭제
+			if(is_del_fail == -1){ printf("delete fail\n"); break; }
+			(list->count)--;
+			printf("C %d\n", data);
+			printf("list count : %d\n", list->count);
+			sem_post(&(list->mutex));
+			sem_post(&(list->list_has_space)); // 데이터 공간이 생겼다고 producer에 신호 보냄
+		}
 	}
 	pthread_exit((void*)0); // consumer를 돌리는 Thread 종료
 }
@@ -183,6 +191,7 @@ void* C(void* args) // Linked list에서 0개가 될 때까지 데이터를 제�
 
 int  main()
 {
+	int i;
 	list_t *list = list_init();
 	if(list == NULL){
 		printf("Program error, list init fail\n");
@@ -195,7 +204,7 @@ int  main()
 		perror("Fail to create Producer thread!"); exit(-1); }
 	if((p_id[1] = pthread_create(&td[1], NULL, C, (void*)(list))) < 0){
 		perror("Fail to create Consumer thread!"); exit(-1); }
-	for(int i = 0; i < PTHREAD_NUM; i++){ pthread_join(td[i], NULL); }
+	for(i = 0; i < PTHREAD_NUM; i++){ pthread_join(td[i], NULL); }
 	
 	list_destroy(list);
 }
