@@ -51,7 +51,7 @@ list_t* list_init()
 	if(sem_init(&(list->list_has_space), 0, 0) < 0){ perror("Fail to make list_has_space"); list_destroy(list); return NULL; }
 	if(sem_init(&(list->list_has_data), 0, 0) < 0){ perror("Fail to make list_has_data"); list_destroy(list); return NULL; }
 	
-	list->count = 0;
+	list->count = -1;
 	
 	return list;
 }
