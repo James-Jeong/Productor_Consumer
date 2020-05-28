@@ -56,17 +56,17 @@ list_t* list_init()
 	return list;
 }
 
-void list_destroy(data_t *data)
+void list_destroy(list_t *list)
 {
-	if(data->head)
+	if(list->head)
 	{
-		node_destroy(data->head);
+		node_destroy(list->head);
 	}
-	if(data->tail)
+	if(list->tail)
 	{
-		node_destroy(data->tail);
+		node_destroy(list->tail);
 	}
-	free(data);
+	free(list);
 }
 
 node_t* node_init(int data)
