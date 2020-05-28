@@ -134,7 +134,7 @@ int list_delete(list_t *list, node_t *target)
 void* P(void* args) // 데이터를 최대 100개까지 Linked list에 축적하는 함수
 {	
 	int i, is_ins_fail;
-	list_t *list = *(*args);
+	list_t *list = (list_t*)(args);
 
 	for(i=0; i<1000; i++)
 	{
@@ -156,7 +156,7 @@ void* P(void* args) // 데이터를 최대 100개까지 Linked list에 축적하
 void* C(void* args) // Linked list에서 0개가 될 때까지 데이터를 제거해서 출력하는데 사용하는 함수
 {
 	int i, data, is_del_fail;
-	list_t *list = *(*args);
+	list_t *list = (list_t*)(args);
 	node_t* Now = list->head;
 
 	for(i=0; i<1000; i++)
